@@ -129,7 +129,8 @@
 .bill-line small { color: #999; font-size: 11px; }
 .bill-line:last-child { border-bottom: none; }
 
-.bill-line--gst    { color: #cc5500; }
+.bill-line--gst      { color: #cc5500; }
+.bill-line--discount span:last-child { color: #1a7a00; font-weight: 700; }
 .bill-line--total  {
   margin-top: 6px;
   background: #f5f5f5;

@@ -16,26 +16,30 @@ export default function MemberModal({ member, plans, onClose, onSave }) {
         status:"active", amount_paid:"" }
   );
   const [saving, setSaving] = useState(false);
+  const [discountedPlanPrice, setDiscountedPlanPrice] = useState("");
   const set = (k,v) => setForm(p => ({...p,[k]:v}));
 
   // Selected plan object
   const selectedPlan = plans.find(p => String(p.id) === String(form.plan));
 
-  // Live GST calculation
-  const gstRate    = 18; // matches backend GST_RATE
-  const planPrice  = selectedPlan ? parseFloat(selectedPlan.price) : 0;
-  const gstAmount  = planPrice * gstRate / 100;
-  const totalOwed  = planPrice + gstAmount;
-  const amtPaid    = parseFloat(form.amount_paid) || 0;
-  const balance    = Math.max(0, totalOwed - amtPaid);
+  // Live GST calculation — all computed on the post-discount price
+  const gstRate         = 18; // matches backend GST_RATE
+  const planPrice       = selectedPlan ? parseFloat(selectedPlan.price) : 0;
+  const effectivePrice  = parseFloat(discountedPlanPrice) || planPrice;
+  const discountAmt     = Math.max(0, planPrice - effectivePrice);
+  const gstAmount       = effectivePrice * gstRate / 100;
+  const totalOwed       = effectivePrice + gstAmount;
+  const amtPaid         = parseFloat(form.amount_paid) || 0;
+  const balance         = Math.max(0, totalOwed - amtPaid);
 
   const handlePlanChange = (id) => {
     set("plan", id);
     if (!isEdit) {
       const p = plans.find(p => String(p.id) === String(id));
-      // Auto-fill total (including GST) as suggested amount
       if (p) {
-        const total = parseFloat(p.price) * (1 + gstRate/100);
+        const price = parseFloat(p.price);
+        setDiscountedPlanPrice(price.toFixed(2));
+        const total = price * (1 + gstRate/100);
         set("amount_paid", total.toFixed(2));
       }
     }
@@ -52,7 +56,8 @@ export default function MemberModal({ member, plans, onClose, onSave }) {
       } else {
         const res = await api.post("/members/list/", {
           ...form,
-          plan_id: form.plan || undefined,
+          plan_id:         form.plan || undefined,
+          discount_amount: discountAmt,
         });
         toast.success("Member enrolled! Bill generated.");
         onSave(res.data.bill);
@@ -130,6 +135,32 @@ export default function MemberModal({ member, plans, onClose, onSave }) {
             </div>
           </div>
 
+          {/* ── Discount field (enroll only) ── */}
+          {!isEdit && selectedPlan && (
+            <div className="form-group">
+              <label className="form-label">Plan Cost After Discount (₹)</label>
+              <input
+                className="form-input"
+                type="number"
+                min="0"
+                max={planPrice}
+                step="0.01"
+                value={discountedPlanPrice}
+                onChange={e => {
+                  setDiscountedPlanPrice(e.target.value);
+                  const ep  = parseFloat(e.target.value) || planPrice;
+                  const tot = ep * (1 + gstRate / 100);
+                  set("amount_paid", tot.toFixed(2));
+                }}
+                style={{fontFamily:"var(--font-mono)"}}
+                placeholder={planPrice.toFixed(2)}
+              />
+              <span style={{fontSize:11,color:"var(--text3)",marginTop:3,display:"block"}}>
+                Default is plan price ₹{planPrice.toLocaleString("en-IN")}. Change to apply a discount.
+              </span>
+            </div>
+          )}
+
           {/* ── GST Breakdown (enroll only) ── */}
           {!isEdit && selectedPlan && (
             <div style={{
@@ -144,7 +175,11 @@ export default function MemberModal({ member, plans, onClose, onSave }) {
                 Fee Breakdown
               </div>
               {[
-                { label:"Plan Price (Base)",          val:`₹${planPrice.toLocaleString("en-IN")}`, color:"var(--text2)" },
+                { label:"Plan Price (Original)",      val:`₹${planPrice.toLocaleString("en-IN")}`,        color:"var(--text2)" },
+                ...(discountAmt > 0 ? [
+                  { label:"Discount",                 val:`- ₹${discountAmt.toFixed(2)}`,                 color:"var(--accent)" },
+                  { label:"Plan Price (After Discount)", val:`₹${effectivePrice.toFixed(2)}`,             color:"var(--text1)" },
+                ] : []),
                 { label:`GST @ ${gstRate}% (CGST 9% + SGST 9%)`,
                   val:`₹${gstAmount.toFixed(2)}`,     color:"var(--warn)" },
                 { label:"Total Amount Payable",        val:`₹${totalOwed.toFixed(2)}`, color:"var(--accent)", bold:true },

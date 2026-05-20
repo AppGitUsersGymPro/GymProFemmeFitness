@@ -398,7 +398,7 @@ function AssignmentModal({ assignment, allMembers, trainers, plans, onClose, onS
     api.get("/finances/gym-settings/").then(r => {
       const s = r.data || {};
       if (s.DIET_PLAN_AMOUNT != null) setDietBaseAmt(parseFloat(s.DIET_PLAN_AMOUNT) || 0);
-      if (s.GST_RATE != null) setGymGstRate(parseFloat(s.GST_RATE) || 18);
+      if (s.GST_RATE != null) { const _r = parseFloat(s.GST_RATE); setGymGstRate(isNaN(_r) ? 18 : _r); }
     }).catch(() => {});
   }, []);
 
