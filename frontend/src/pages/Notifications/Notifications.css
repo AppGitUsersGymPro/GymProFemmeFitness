@@ -1,0 +1,88 @@
+/* ── Log card header (title + filters) ───────────────────────────────────── */
+.notif-log-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.notif-log-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--text1);
+}
+
+/* ── Filter strip ─────────────────────────────────────────────────────────── */
+.notif-filters {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.notif-filter-phone   { width: 140px;  font-size: 12px; }
+.notif-filter-trigger { width: 190px;  font-size: 12px; }
+.notif-filter-date    { width: 150px;  font-size: 12px; }
+
+/* ── Desktop message cell — full text, wrapping ───────────────────────────── */
+.notif-msg-cell {
+    font-size: 12px;
+    color: var(--text2);
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.5;
+    min-width: 180px;
+}
+
+/* ── Mobile message — full text, wrapping ────────────────────────────────── */
+.notif-mobile-msg {
+    font-size: 11.5px;
+    color: var(--text3);
+    white-space: normal;
+    word-break: break-word;
+    max-width: 100%;
+    line-height: 1.45;
+    margin-top: 2px;
+}
+
+/* ── Tablet (≤900px): tighten filters ───────────────────────────────────── */
+@media (max-width: 900px) {
+    .notif-filter-phone   { width: 120px; }
+    .notif-filter-trigger { width: 160px; }
+    .notif-filter-date    { width: 130px; }
+}
+
+/* ── Mobile (≤640px): stack everything ──────────────────────────────────── */
+@media (max-width: 640px) {
+    .notif-log-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 12px 14px;
+    }
+
+    .notif-filters {
+        flex-direction: column;
+        width: 100%;
+        gap: 8px;
+    }
+
+    /* Every filter input / select / button goes full width */
+    .notif-filters .form-input,
+    .notif-filter-phone,
+    .notif-filter-trigger,
+    .notif-filter-date {
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 13px;
+    }
+
+    .notif-filters .btn {
+        width: 100%;
+    }
+}
