@@ -18,6 +18,10 @@ class Notification(models.Model):
         ("diet_reminder",          "Diet Reminder"),
         ("pending_payment_member", "Pending Payment Reminder"),
         ("pending_payment_admin",  "Pending Payment Summary (Admin)"),
+        # Bill-send events
+        ("balance",                "Balance Payment Bill"),
+        ("pt_renewal",             "PT Renewal Bill"),
+        ("pt_balance",             "PT Balance Payment Bill"),
     ]
 
     recipient_name  = models.CharField(max_length=150)

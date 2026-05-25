@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../../api/axios";
 import toast from "react-hot-toast";
+import "./Notifications.css";
 
 export default function Notifications() {
   const [list, setList] = useState([]);
@@ -47,8 +48,10 @@ export default function Notifications() {
     } catch { toast.error("Failed"); } finally { setSending(false); }
   };
 
-  const statusColor = { sent: "badge-green", failed: "badge-red", pending: "badge-yellow" };
+  const statusColor  = { sent: "badge-green", failed: "badge-red",  pending: "badge-yellow" };
   const channelColor = { email: "badge-blue", whatsapp: "badge-green", sms: "badge-teal", in_app: "badge-gray" };
+
+  const fmtTrigger = (t) => t.replaceAll("_", " ");
 
   return (
     <div>
@@ -59,61 +62,55 @@ export default function Notifications() {
         </div>
       </div>
 
-      {/* Action buttons
-      <div className="card" style={{padding:20,marginBottom:20}}>
-        <div style={{fontFamily:"var(--font-display)",fontSize:14,fontWeight:700,marginBottom:14}}>Send Bulk Notifications</div>
-        <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-          <button className="btn btn-primary" onClick={sendReminders} disabled={sending}>
-            {sending?"Sending…":"📲 Send 3-Day Renewal Reminders"}
-          </button>
-          <button className="btn btn-danger" onClick={sendExpiry} disabled={sending}>
-            ⚠ Process Expired Memberships
-          </button>
-        </div>
-        <div style={{marginTop:12,fontSize:12,color:"var(--text3)"}}>
-          Configure email and WhatsApp in <code style={{background:"var(--surface2)",padding:"1px 6px",borderRadius:4,color:"var(--accent)"}}>backend/.env</code> to enable real delivery.
-        </div>
-      </div> */}
-
       {/* Log */}
       <div className="card">
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <span style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700 }}>Notification Log</span>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+
+        {/* ── Header: title + filters ── */}
+        <div className="notif-log-header">
+          <span className="notif-log-title">Notification Log</span>
+
+          <div className="notif-filters">
             <input
               type="tel"
-              className="form-input"
-              placeholder="Phone"
+              className="form-input notif-filter-phone"
+              placeholder="Filter by phone"
               value={phoneFilter}
               onChange={e => { setPhoneFilter(e.target.value); setPage(1); }}
-              style={{ width: 140, fontSize: 12 }} />
+            />
             <select
-              className="form-input"
+              className="form-input notif-filter-trigger"
               value={triggerFilter}
               onChange={e => { setTriggerFilter(e.target.value); setPage(1); }}
-              style={{ maxWidth: 200, fontSize: 12 }}>
+            >
               <option value="">All triggers</option>
-              <option value="renewal_remind">Renewal Reminder</option>
-              <option value="renewal_confirm">Renewal Confirmed</option>
               <option value="enrollment">New Enrollment</option>
+              <option value="renewal_confirm">Renewal Confirmed</option>
+              <option value="balance">Balance Payment</option>
+              <option value="renewal_remind">Renewal Reminder</option>
               <option value="expiry">Membership Expired</option>
-              <option value="manual">Manual</option>
-              <option value="enquiry_welcome">Enquiry Welcome</option>
-              <option value="enquiry_followup">Enquiry Follow-up</option>
+              <option value="pt_renewal">PT Renewal</option>
+              <option value="pt_balance">PT Balance Payment</option>
               <option value="absent">Member Absent</option>
               <option value="staff_absent">Staff Absent</option>
-              <option value="new_plan">New Plan Announcement</option>
               <option value="diet_reminder">Diet Reminder</option>
+              <option value="pending_payment_member">Pending Payment (Member)</option>
+              <option value="pending_payment_admin">Pending Payment (Admin)</option>
+              <option value="new_plan">New Plan Announcement</option>
+              <option value="enquiry_welcome">Enquiry Welcome</option>
+              <option value="enquiry_followup">Enquiry Follow-up</option>
+              <option value="manual">Manual</option>
             </select>
             <input
               type="date"
-              className="form-input"
+              className="form-input notif-filter-date"
               value={dateFilter}
               onChange={e => { setDateFilter(e.target.value); setPage(1); }}
-              style={{ maxWidth: 160, fontSize: 12 }} />
+            />
             {(phoneFilter || triggerFilter || dateFilter) && (
-              <button className="btn btn-sm btn-secondary"
-                onClick={() => { setPhoneFilter(""); setTriggerFilter(""); setDateFilter(""); setPage(1); }}>
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => { setPhoneFilter(""); setTriggerFilter(""); setDateFilter(""); setPage(1); }}
+              >
                 Clear
               </button>
             )}
@@ -121,7 +118,7 @@ export default function Notifications() {
           </div>
         </div>
 
-        {/* Mobile cards */}
+        {/* ── Mobile cards (≤640px) ── */}
         <div className="mobile-card-list" style={{ padding: 12 }}>
           {loading ? (
             <div className="mobile-card__empty">Loading…</div>
@@ -132,56 +129,66 @@ export default function Notifications() {
               <div className="mobile-card__left">
                 <span className="mobile-card__title">{n.recipient_name}</span>
                 <span className="mobile-card__meta">{n.recipient_phone}</span>
-                <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <span style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
                   <span className={`badge ${channelColor[n.channel] || "badge-gray"}`} style={{ fontSize: 11 }}>
                     {n.channel}
                   </span>
                   <span className={`badge ${statusColor[n.status] || "badge-gray"}`} style={{ fontSize: 11 }}>
                     {n.status}
                   </span>
-                  <span className="mobile-card__meta">{n.trigger_type.replace("_", " ")}</span>
+                  <span className="mobile-card__meta">{fmtTrigger(n.trigger_type)}</span>
                 </span>
                 {n.sent_at && (
                   <span className="mobile-card__meta">
                     {new Date(n.sent_at).toLocaleString("en-IN")}
                   </span>
                 )}
-                <span className="mobile-card__meta" style={{ maxWidth: "100%", whiteSpace: "normal" }}>
-                  {n.message}
-                </span>
+                {/* Full message — wraps naturally */}
+                <span className="notif-mobile-msg">{n.message}</span>
               </div>
             </div>
           ))}
         </div>
 
+        {/* ── Desktop table (>640px) ── */}
         <div className="table-wrap desktop-table-view">
           <table>
-            <thead><tr>
-              <th>Recipient</th><th>Trigger</th><th>Channel</th>
-              <th>Status</th><th>Sent At</th><th>Message</th>
-            </tr></thead>
+            <thead>
+              <tr>
+                <th>Recipient</th>
+                <th>Trigger</th>
+                <th>Channel</th>
+                <th>Status</th>
+                <th>Sent At</th>
+                <th>Message</th>
+              </tr>
+            </thead>
             <tbody>
-              {loading ? <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>Loading…</td></tr>
-                : list.length === 0 ? <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>No notifications yet</td></tr>
-                  : list.map(n => (
-                    <tr key={n.id}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{n.recipient_name}</div>
-                        <div style={{ fontSize: 11, color: "var(--text3)" }}>{n.recipient_phone}</div>
-                      </td>
-                      <td><span style={{ fontSize: 12, color: "var(--text2)" }}>{n.trigger_type.replace("_", " ")}</span></td>
-                      <td><span className={`badge ${channelColor[n.channel] || "badge-gray"}`}>{n.channel}</span></td>
-                      <td><span className={`badge ${statusColor[n.status] || "badge-gray"}`}>{n.status}</span></td>
-                      <td style={{ color: "var(--text3)", fontSize: 11 }}>{n.sent_at ? new Date(n.sent_at).toLocaleString("en-IN") : "—"}</td>
-                      <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "var(--text2)" }}>
-                        {n.message}
-                      </td>
-                    </tr>
-                  ))}
+              {loading ? (
+                <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>Loading…</td></tr>
+              ) : list.length === 0 ? (
+                <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "var(--text3)" }}>No notifications yet</td></tr>
+              ) : list.map(n => (
+                <tr key={n.id}>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{n.recipient_name}</div>
+                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{n.recipient_phone}</div>
+                  </td>
+                  <td><span style={{ fontSize: 12, color: "var(--text2)" }}>{fmtTrigger(n.trigger_type)}</span></td>
+                  <td><span className={`badge ${channelColor[n.channel] || "badge-gray"}`}>{n.channel}</span></td>
+                  <td><span className={`badge ${statusColor[n.status] || "badge-gray"}`}>{n.status}</span></td>
+                  <td style={{ color: "var(--text3)", fontSize: 11, whiteSpace: "nowrap" }}>
+                    {n.sent_at ? new Date(n.sent_at).toLocaleString("en-IN") : "—"}
+                  </td>
+                  {/* Full message — wraps, no truncation */}
+                  <td className="notif-msg-cell">{n.message}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
+        {/* ── Pagination ── */}
         <div className="members-pagination" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 18px", borderTop: "1px solid var(--border)" }}>
           <span style={{ fontSize: 12, color: "var(--text3)" }}>{count} total</span>
           <div style={{ display: "flex", gap: 6 }}>

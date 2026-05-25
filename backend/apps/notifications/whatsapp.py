@@ -685,6 +685,25 @@ _BILL_TRIGGER_LABEL = {
     "pt_balance": "PT balance payment",
 }
 
+# Maps bill trigger_type → Notification.trigger_type (model choices)
+_BILL_NOTIFY_TRIGGER = {
+    "enrollment": "enrollment",
+    "renewal":    "renewal_confirm",
+    "balance":    "balance",
+    "pt_renewal": "pt_renewal",
+    "pt_balance": "pt_balance",
+}
+
+# Human-readable message stored on the Notification row — mirrors what the
+# WhatsApp template actually says to the member (same style as utils.TEMPLATES).
+_BILL_NOTIFY_MSG = {
+    "enrollment": "Hi {name}, welcome aboard! Your enrollment bill (Invoice: {invoice}) has been generated. Total: Rs.{total}. Amount paid: Rs.{paid}. Balance due: Rs.{balance}. Please find your bill attached.",
+    "renewal":    "Hi {name}, your membership has been renewed. Renewal bill (Invoice: {invoice}). Total: Rs.{total}. Amount paid: Rs.{paid}. Balance due: Rs.{balance}. Please find your bill attached.",
+    "balance":    "Hi {name}, your balance payment has been recorded (Invoice: {invoice}). Amount paid: Rs.{paid}. Remaining balance: Rs.{balance}. Please find your bill attached.",
+    "pt_renewal": "Hi {name}, your personal trainer renewal bill (Invoice: {invoice}) has been generated. Total: Rs.{total}. Amount paid: Rs.{paid}. Balance due: Rs.{balance}. Please find your bill attached.",
+    "pt_balance": "Hi {name}, your PT balance payment has been recorded (Invoice: {invoice}). Amount paid: Rs.{paid}. Remaining balance: Rs.{balance}. Please find your bill attached.",
+}
+
 
 def send_bill_on_whatsapp(phone: str, bill: dict, trigger_type: str) -> None:
     """
@@ -693,45 +712,32 @@ def send_bill_on_whatsapp(phone: str, bill: dict, trigger_type: str) -> None:
     Works outside the 24-hr customer service window because it uses an approved
     WhatsApp template.
     `phone` should already include country code e.g. "919876543210"
+
+    Pattern (same as send_notification):
+      1. Notification row created with status="pending"  → visible in table immediately
+      2. PDF generated, uploaded, template sent directly (signal skips bill templates)
+      3. Row updated to status="sent"/"failed" via queryset.update (no re-signal)
     """
     from apps.finances.gst_utils import is_notify_enabled
     setting_key = _BILL_TRIGGER_SETTING_KEY.get(trigger_type)
     if setting_key and not is_notify_enabled(setting_key):
         return
 
-    if not phone:
-        logger.warning("send_bill_on_whatsapp: no phone number, skipping.")
+    if not phone or not bill:
+        logger.warning("send_bill_on_whatsapp: missing phone or bill data, skipping.")
         return
 
-    if not bill:
-        logger.warning("send_bill_on_whatsapp: no bill data, skipping.")
-        return
-
-    is_pt = trigger_type in ("pt_renewal", "pt_balance")
-
-    # Step 1: generate PDF
-    try:
-        pdf_bytes = generate_pt_bill_pdf(bill) if is_pt else generate_bill_pdf(bill)
-    except Exception as e:
-        logger.error(f"Bill PDF generation failed: {e}")
-        return
-
-    # Step 2: upload to Meta media endpoint
-    filename = f"{bill.get('invoice_number', 'bill')}.pdf"
-    upload   = upload_whatsapp_media(pdf_bytes, filename)
-    if not upload["success"]:
-        logger.error(f"Bill PDF upload failed: {upload['error']}")
-        return
-
-    # Step 3: send template with document header
-    member_name = bill.get("member_name", "")
-    invoice_no  = bill.get("invoice_number", "")
-    amount_paid = _fmt_money(bill.get("amount_paid"))
-    balance     = _fmt_money(bill.get("balance"))
+    # ── Build notification metadata ───────────────────────────────────────────
+    is_pt          = trigger_type in ("pt_renewal", "pt_balance")
+    member_name    = bill.get("member_name", "")
+    invoice_no     = bill.get("invoice_number", "")
+    amount_paid    = _fmt_money(bill.get("amount_paid"))
+    balance        = _fmt_money(bill.get("balance"))
+    notify_trigger = _BILL_NOTIFY_TRIGGER.get(trigger_type, "manual")
 
     if is_pt:
         template_name = "pt_bill"
-        total_val = _fmt_money(bill.get("total_amount") or bill.get("total_with_gst"))
+        total_val   = _fmt_money(bill.get("total_amount") or bill.get("total_with_gst"))
         body_params = [
             member_name,
             invoice_no,
@@ -743,7 +749,7 @@ def send_bill_on_whatsapp(phone: str, bill: dict, trigger_type: str) -> None:
         ]
     else:
         template_name = "membership_bill"
-        total_val = _fmt_money(bill.get("total_with_gst") or bill.get("total_amount"))
+        total_val   = _fmt_money(bill.get("total_with_gst") or bill.get("total_amount"))
         body_params = [
             member_name,
             _BILL_TRIGGER_LABEL.get(trigger_type, "invoice"),
@@ -753,7 +759,57 @@ def send_bill_on_whatsapp(phone: str, bill: dict, trigger_type: str) -> None:
             balance,
         ]
 
-    send_whatsapp_template(
+    msg_tpl  = _BILL_NOTIFY_MSG.get(trigger_type, "Bill sent to {name}. Invoice: {invoice}.")
+    msg_body = msg_tpl.format(
+        name    = member_name,
+        invoice = invoice_no,
+        total   = total_val,
+        paid    = amount_paid,
+        balance = balance,
+    )
+
+    # ── Step 1: create Notification row as "pending" (same as send_notification) ─
+    from apps.notifications.models import Notification
+    try:
+        notif = Notification.objects.create(
+            recipient_name  = member_name,
+            recipient_phone = phone,
+            channel         = "whatsapp",
+            trigger_type    = notify_trigger,
+            message         = msg_body,
+            template_name   = template_name,
+            template_params = body_params,
+            status          = "pending",
+        )
+    except Exception as e:
+        logger.error(f"send_bill_on_whatsapp: could not create Notification row: {e}")
+        notif = None
+
+    error_text  = ""
+    send_status = "failed"
+
+    # ── Step 2: generate PDF ──────────────────────────────────────────────────
+    try:
+        pdf_bytes = generate_pt_bill_pdf(bill) if is_pt else generate_bill_pdf(bill)
+    except Exception as e:
+        error_text = f"PDF generation failed: {e}"
+        logger.error(error_text)
+        if notif:
+            Notification.objects.filter(pk=notif.pk).update(status="failed", error_log=error_text)
+        return
+
+    # ── Step 3: upload to Meta media endpoint ─────────────────────────────────
+    filename = f"{invoice_no or 'bill'}.pdf"
+    upload   = upload_whatsapp_media(pdf_bytes, filename)
+    if not upload["success"]:
+        error_text = f"Media upload failed: {upload['error']}"
+        logger.error(error_text)
+        if notif:
+            Notification.objects.filter(pk=notif.pk).update(status="failed", error_log=error_text)
+        return
+
+    # ── Step 4: send WhatsApp template with document header ───────────────────
+    result = send_whatsapp_template(
         to                = phone,
         template_name     = template_name,
         language_code     = "en",
@@ -761,3 +817,16 @@ def send_bill_on_whatsapp(phone: str, bill: dict, trigger_type: str) -> None:
         document_media_id = upload["media_id"],
         document_filename = filename,
     )
+
+    if result.get("success"):
+        send_status = "sent"
+    else:
+        error_text = result.get("error", "Unknown error")
+
+    # ── Step 5: update Notification row with final status ─────────────────────
+    # queryset.update() bypasses post_save signal so no re-dispatch happens.
+    if notif:
+        Notification.objects.filter(pk=notif.pk).update(
+            status    = send_status,
+            error_log = error_text,
+        )

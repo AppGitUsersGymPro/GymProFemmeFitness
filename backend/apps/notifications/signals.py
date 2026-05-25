@@ -72,15 +72,25 @@ def notify_members_on_new_plan(sender, instance, created, **kwargs):
         )
 
 
+# Bill templates require a document header (PDF media_id) that the signal cannot
+# provide — send_bill_on_whatsapp() dispatches these directly and updates status itself.
+_BILL_TEMPLATES = {"membership_bill", "pt_bill"}
+
+
 @receiver(post_save, sender=Notification)
 def dispatch_whatsapp_on_create(sender, instance, created, **kwargs):
     """
     Triggers on every new Notification row (status=pending).
     Uses queryset.update() to avoid re-triggering the signal on status update.
+    Bill-type templates (membership_bill, pt_bill) are skipped here because
+    they require a PDF document header handled directly by send_bill_on_whatsapp().
     """
     if not created:
         return
     if instance.status != "pending":
+        return
+    if instance.template_name in _BILL_TEMPLATES:
+        # Delivery is handled directly by send_bill_on_whatsapp(); skip here.
         return
     if not instance.recipient_phone:
         logger.warning(f"Notification {instance.pk} skipped — no phone number.")
