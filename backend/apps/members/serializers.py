@@ -82,6 +82,7 @@ class MemberSerializer(serializers.ModelSerializer):
     balance_due        = serializers.SerializerMethodField()
     member_id_display  = serializers.SerializerMethodField()
     latest_discount_amount = serializers.SerializerMethodField()
+    fingerprint_slot_id = serializers.SerializerMethodField()
 
     class Meta:
         model  = Member
@@ -120,6 +121,9 @@ class MemberSerializer(serializers.ModelSerializer):
         return float(balance)
 
     def get_member_id_display(self, obj): return obj.display_id()
+    def get_fingerprint_slot_id(self, obj):
+        slot = getattr(obj, "fingerprint_slot", None)
+        return slot.slot_id if slot else None
     def get_plan_allows_trainer(self, obj):
         return obj.plan_type in ("standard", "premium") and obj.personal_trainer
     def get_latest_discount_amount(self, obj):

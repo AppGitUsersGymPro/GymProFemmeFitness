@@ -4,8 +4,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import User
 from .serializers import CustomTokenObtainPairSerializer, UserSerializer, ChangePasswordSerializer
 import logging
-from apps.staff.models import StaffMember, StaffAttendance
-from apps.members.models import Member, MemberAttendance
+from apps.staff.models import StaffAttendance
+from apps.members.models import MemberAttendance
+from apps.devices.models import FingerprintSlot
 from rest_framework import generics, status, permissions
 from django.views.decorators.csrf import csrf_exempt
 from datetime import datetime
@@ -100,59 +101,51 @@ def iclock_data(request):
             punch_time = dt_obj.time()
             logger.warning(f"[Biometric] Raw user_id: {user_id} Time: {dt_obj}")
 
-            # ── Parse prefix ──────────────────────────────
-            uid = user_id.upper()
+            # ── Resolve device user_id -> FingerprintSlot ──
+            try:
+                slot_id = int(user_id)
+            except ValueError:
+                logger.warning(f"[Biometric] Non-numeric user_id from device: {user_id}")
+                continue
 
-            if uid.startswith("M"):
+            try:
+                slot = FingerprintSlot.objects.select_related("member", "staff").get(slot_id=slot_id)
+            except FingerprintSlot.DoesNotExist:
+                logger.warning(f"[Biometric] No FingerprintSlot found for slot_id={slot_id}")
+                continue
+
+            if slot.member_id:
                 # ── Member ────────────────────────────────
-                try:
-                    numeric_id = int(uid[1:])   # "M0001" → 1
-                except ValueError:
-                    logger.warning(f"[Biometric] Bad member id format: {user_id}")
-                    continue
+                member = slot.member
+                attendance, _ = MemberAttendance.objects.get_or_create(
+                    member=member, date=today
+                )
+                if not attendance.check_in:
+                    attendance.check_in = punch_time
+                    punch_type = "IN"
+                else:
+                    attendance.check_out = punch_time
+                    punch_type = "OUT"
+                attendance.save()
+                logger.info(f"[Member {punch_type}] {member.name} | {punch_time}")
 
-                try:
-                    member = Member.objects.get(id=numeric_id)
-                    attendance, _ = MemberAttendance.objects.get_or_create(
-                        member=member, date=today
-                    )
-                    if not attendance.check_in:
-                        attendance.check_in = punch_time
-                        punch_type = "IN"
-                    else:
-                        attendance.check_out = punch_time
-                        punch_type = "OUT"
-                    attendance.save()
-                    logger.info(f"[Member {punch_type}] {member.name} | {punch_time}")
-                except Member.DoesNotExist:
-                    logger.warning(f"[Biometric] Member id {numeric_id} not found")
-
-            elif uid.startswith("S"):
+            elif slot.staff_id:
                 # ── Staff ─────────────────────────────────
-                try:
-                    numeric_id = int(uid[1:])   # "S0002" → 2
-                except ValueError:
-                    logger.warning(f"[Biometric] Bad staff id format: {user_id}")
-                    continue
-
-                try:
-                    staff = StaffMember.objects.get(id=numeric_id)
-                    attendance, _ = StaffAttendance.objects.get_or_create(
-                        staff=staff, date=today
-                    )
-                    if not attendance.check_in:
-                        attendance.check_in = punch_time
-                        punch_type = "IN"
-                    else:
-                        attendance.check_out = punch_time
-                        punch_type = "OUT"
-                    attendance.save()
-                    logger.info(f"[Staff {punch_type}] {staff.name} | {punch_time}")
-                except StaffMember.DoesNotExist:
-                    logger.warning(f"[Biometric] Staff id {numeric_id} not found")
+                staff = slot.staff
+                attendance, _ = StaffAttendance.objects.get_or_create(
+                    staff=staff, date=today
+                )
+                if not attendance.check_in:
+                    attendance.check_in = punch_time
+                    punch_type = "IN"
+                else:
+                    attendance.check_out = punch_time
+                    punch_type = "OUT"
+                attendance.save()
+                logger.info(f"[Staff {punch_type}] {staff.name} | {punch_time}")
 
             else:
-                logger.warning(f"[Biometric] Unknown prefix in user_id: {user_id}")
+                logger.warning(f"[Biometric] FingerprintSlot {slot_id} has neither member nor staff set")
 
         return HttpResponse("OK")
 

@@ -1046,7 +1046,7 @@ function PaymentHistoryModal({ member, onClose, onRefresh, onBill, gymInfo = {} 
 }
 
 /* ─── View Member Detail Modal (mobile) ───────────── */
-function ViewMemberModal({ member: m, onClose, onEdit, onRenew, onPayments, onCancel, onDelete }) {
+function ViewMemberModal({ member: m, onClose, onEdit, onRenew, onPayments, onCancel, onDelete, onEnrollFingerprint, onUnenrollFingerprint }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
@@ -1078,6 +1078,7 @@ function ViewMemberModal({ member: m, onClose, onEdit, onRenew, onPayments, onCa
             { label: "Days Left", val: m.days_until_expiry != null ? `${m.days_until_expiry}d` : "—" },
             { label: "Total Paid", val: `₹${Number(m.total_paid || 0).toLocaleString("en-IN")}` },
             { label: "Balance Due", val: (m.balance_due || 0) > 0 ? `₹${Number(m.balance_due).toLocaleString("en-IN")}` : "None" },
+            { label: "Fingerprint ID", val: m.fingerprint_slot_id != null ? `Slot ${m.fingerprint_slot_id}` : "Not enrolled" },
           ].map(({ label, val }) => (
             <div key={label}>
               <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 2 }}>{label}</div>
@@ -1108,6 +1109,13 @@ function ViewMemberModal({ member: m, onClose, onEdit, onRenew, onPayments, onCa
           </button>
           {m.status !== "cancelled" && (
             <button className="btn btn-sm btn-danger" onClick={onCancel}>Cancel</button>
+          )}
+          {m.fingerprint_slot_id != null ? (
+            <button className="btn btn-sm btn-danger" onClick={onUnenrollFingerprint}>Unenroll Fingerprint</button>
+          ) : (
+            <button className="btn btn-sm" style={{ background: "rgba(168,255,87,.1)", color: "var(--accent)" }} onClick={onEnrollFingerprint}>
+              Enroll Fingerprint
+            </button>
           )}
           <button className="btn btn-sm" style={{ background: "rgba(255,91,91,.15)", color: "var(--danger)", border: "1px solid rgba(255,91,91,.3)" }} onClick={onDelete}>
             🗑 Delete
@@ -1452,6 +1460,45 @@ export default function Members() {
           load();
         } catch (err) {
           toast.error(err.response?.data?.detail || "Failed to delete member");
+        }
+      },
+      onCancel: () => setConfirmState(null),
+    });
+  };
+
+  const enrollFingerprint = (m) => {
+    setConfirmState({
+      title: "Enroll Fingerprint",
+      message: `Allocate a fingerprint slot for ${m.name}? You'll need to scan their finger on the device and set this slot number as their device ID.`,
+      confirmText: "Enroll",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const { data } = await api.post(`/members/list/${m.id}/enroll-fingerprint/`);
+          toast.success(`Fingerprint slot ${data.slot_id} allocated for ${m.name}`);
+          load();
+        } catch (err) {
+          toast.error(err.response?.data?.detail || "Failed to enroll fingerprint");
+        }
+      },
+      onCancel: () => setConfirmState(null),
+    });
+  };
+
+  const unenrollFingerprint = (m) => {
+    setConfirmState({
+      title: "Unenroll Fingerprint",
+      message: `Remove the fingerprint slot for ${m.name}? Their fingerprint will need to be re-scanned and re-assigned if enrolled again. This does NOT delete ${m.name}'s account.`,
+      confirmText: "Unenroll",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          await api.post(`/members/list/${m.id}/unenroll-fingerprint/`);
+          toast.success(`Fingerprint slot removed for ${m.name}`);
+          load();
+        } catch (err) {
+          toast.error(err.response?.data?.detail || "Failed to unenroll fingerprint");
         }
       },
       onCancel: () => setConfirmState(null),
@@ -1829,6 +1876,8 @@ export default function Members() {
           onPayments={() => { setSelected(viewMember); setModal("payments"); setViewMember(null); }}
           onCancel={() => { cancelMember(viewMember); setViewMember(null); }}
           onDelete={() => { deleteMember(viewMember); setViewMember(null); }}
+          onEnrollFingerprint={() => { enrollFingerprint(viewMember); setViewMember(null); }}
+          onUnenrollFingerprint={() => { unenrollFingerprint(viewMember); setViewMember(null); }}
         />
       )}
     </div>

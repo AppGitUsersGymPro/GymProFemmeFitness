@@ -1295,6 +1295,7 @@ export default function Staff() {
   const [loading, setLoading] = useState(true);
   // Calendar drill-down: { id, name } or null
   const [calStaff, setCalStaff] = useState(null);
+  const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
     document.getElementById("page-title").textContent = "Staff";
@@ -1313,6 +1314,45 @@ export default function Staff() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const enrollFingerprint = (s) => {
+    setConfirmState({
+      title: "Enroll Fingerprint",
+      message: `Allocate a fingerprint slot for ${s.name}? You'll need to scan their finger on the device and set this slot number as their device ID.`,
+      confirmText: "Enroll",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const { data } = await api.post(`/staff/members/${s.id}/enroll-fingerprint/`);
+          toast.success(`Fingerprint slot ${data.slot_id} allocated for ${s.name}`);
+          load();
+        } catch (err) {
+          toast.error(err.response?.data?.detail || "Failed to enroll fingerprint");
+        }
+      },
+      onCancel: () => setConfirmState(null),
+    });
+  };
+
+  const unenrollFingerprint = (s) => {
+    setConfirmState({
+      title: "Unenroll Fingerprint",
+      message: `Remove the fingerprint slot for ${s.name}? Their fingerprint will need to be re-scanned and re-assigned if enrolled again. This does NOT delete ${s.name}'s account.`,
+      confirmText: "Unenroll",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          await api.post(`/staff/members/${s.id}/unenroll-fingerprint/`);
+          toast.success(`Fingerprint slot removed for ${s.name}`);
+          load();
+        } catch (err) {
+          toast.error(err.response?.data?.detail || "Failed to unenroll fingerprint");
+        }
+      },
+      onCancel: () => setConfirmState(null),
+    });
+  };
 
   // If viewing a calendar, render it full-page instead of the tab content
   if (calStaff) {
@@ -1391,6 +1431,9 @@ export default function Staff() {
                   ₹{Number(s.salary).toLocaleString("en-IN")}
                   {s.shift_template_name ? ` · ${s.shift_template_name}` : ""}
                 </span>
+                <span className="mobile-card__meta">
+                  {s.fingerprint_slot_id != null ? `FP Slot ${s.fingerprint_slot_id}` : "Fingerprint: Not enrolled"}
+                </span>
               </div>
               <div className="mobile-card__right">
                 <button className="btn btn-sm btn-secondary"
@@ -1405,6 +1448,17 @@ export default function Staff() {
                   onClick={() => setCalStaff({ id: s.id, name: s.name })}>
                   📅 Calendar
                 </button>
+                {s.fingerprint_slot_id != null ? (
+                  <button className="btn btn-sm btn-danger" onClick={() => unenrollFingerprint(s)}>
+                    Unenroll FP
+                  </button>
+                ) : (
+                  <button className="btn btn-sm"
+                    style={{ background: "rgba(168,255,87,.1)", color: "var(--accent)", whiteSpace: "nowrap" }}
+                    onClick={() => enrollFingerprint(s)}>
+                    Enroll FP
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -1426,6 +1480,9 @@ export default function Staff() {
                       <span className="staff-id">
                         {s.staff_id_display || `S${String(s.id).padStart(4, "0")}`}
                       </span>
+                      <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 2 }}>
+                        {s.fingerprint_slot_id != null ? `FP Slot ${s.fingerprint_slot_id}` : "Not enrolled"}
+                      </div>
                     </td>
                     <td><b>{s.name}</b></td>
                     <td><span className="badge badge-blue">{s.role}</span></td>
@@ -1452,7 +1509,7 @@ export default function Staff() {
                           s.status === "on_leave" ? "badge-yellow" : "badge-gray"
                         }`}>{s.status}</span>
                     </td>
-                    <td style={{ display: "flex", gap: 6 }}>
+                    <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button className="btn btn-sm btn-secondary"
                         onClick={() => { setSelected(s); setModal("edit"); }}>
                         Edit
@@ -1465,6 +1522,17 @@ export default function Staff() {
                         onClick={() => setCalStaff({ id: s.id, name: s.name })}>
                         📅 Calendar
                       </button>
+                      {s.fingerprint_slot_id != null ? (
+                        <button className="btn btn-sm btn-danger" onClick={() => unenrollFingerprint(s)}>
+                          Unenroll FP
+                        </button>
+                      ) : (
+                        <button className="btn btn-sm"
+                          style={{ background: "rgba(168,255,87,.1)", color: "var(--accent)" }}
+                          onClick={() => enrollFingerprint(s)}>
+                          Enroll FP
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1637,6 +1705,7 @@ export default function Staff() {
         <AttendanceModal staffList={staffList} onClose={() => setModal(null)}
           onSave={() => { setModal(null); load(); }} />
       )}
+      {confirmState && <ConfirmModal {...confirmState} />}
     </div>
   );
 }

@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.members',
     'apps.staff',
+    'apps.devices',
     'apps.equipment',
     'apps.finances',
     'apps.notifications',

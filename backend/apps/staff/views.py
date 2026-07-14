@@ -6,12 +6,15 @@ from rest_framework.permissions import AllowAny
 from django.utils import timezone
 from django.conf import settings as djconf
 from django.db.models import Sum, Q
+from django.db import IntegrityError
+from django.core.exceptions import ValidationError as DjangoValidationError
 from decimal import Decimal
 from datetime import datetime, timedelta, time
 import datetime as dt
 import calendar
 import logging
 from apps.notifications.utils import send_staff_notification
+from apps.devices.services import allocate_lowest_free_slot, free_slot
 
 from .models import StaffMember, StaffShift, StaffAttendance, StaffPayment
 from .serializers import (
@@ -298,7 +301,7 @@ class StaffShiftViewSet(viewsets.ModelViewSet):
 
 
 class StaffViewSet(viewsets.ModelViewSet):
-    queryset         = StaffMember.objects.select_related("shift_template").all()
+    queryset         = StaffMember.objects.select_related("shift_template", "fingerprint_slot").all()
     serializer_class = StaffSerializer
     search_fields    = ["name", "phone", "email"]
     filterset_fields = ["role", "shift", "status"]
@@ -320,6 +323,31 @@ class StaffViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         logger.info(f"StaffViewSet.destroy: staff={instance.id} ({instance.name})")
         instance.delete()
+
+    @action(detail=True, methods=["post"], url_path="enroll-fingerprint")
+    def enroll_fingerprint(self, request, pk=None):
+        staff = self.get_object()
+        if hasattr(staff, "fingerprint_slot"):
+            return Response({
+                "detail": "Staff already has a fingerprint slot.",
+                "slot_id": staff.fingerprint_slot.slot_id,
+            }, status=400)
+        try:
+            slot = allocate_lowest_free_slot(staff=staff)
+        except (DjangoValidationError, IntegrityError) as e:
+            logger.warning(f"StaffViewSet.enroll_fingerprint: staff_id={staff.id} failed: {e}")
+            return Response({"detail": "Could not allocate a fingerprint slot. Please retry."}, status=409)
+        logger.info(f"StaffViewSet.enroll_fingerprint: staff_id={staff.id} -> slot_id={slot.slot_id}")
+        return Response({"slot_id": slot.slot_id})
+
+    @action(detail=True, methods=["post"], url_path="unenroll-fingerprint")
+    def unenroll_fingerprint(self, request, pk=None):
+        staff = self.get_object()
+        freed = free_slot(staff=staff)
+        if not freed:
+            return Response({"detail": "Staff has no fingerprint slot."}, status=400)
+        logger.info(f"StaffViewSet.unenroll_fingerprint: staff_id={staff.id} slot freed")
+        return Response({"detail": "Fingerprint slot unenrolled."}, status=204)
 
     @action(detail=False, methods=["get"])
     def stats(self, request):

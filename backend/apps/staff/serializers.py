@@ -34,6 +34,7 @@ class StaffSerializer(serializers.ModelSerializer):
     staff_id_display       = serializers.SerializerMethodField()
     shift_template_name    = serializers.SerializerMethodField()
     shift_duration_minutes = serializers.SerializerMethodField()
+    fingerprint_slot_id    = serializers.SerializerMethodField()
 
     class Meta:
         model  = StaffMember
@@ -41,6 +42,10 @@ class StaffSerializer(serializers.ModelSerializer):
 
     def get_staff_id_display(self, obj):
         return obj.display_id()
+
+    def get_fingerprint_slot_id(self, obj):
+        slot = getattr(obj, "fingerprint_slot", None)
+        return slot.slot_id if slot else None
 
     def get_shift_template_name(self, obj):
         return obj.shift_template.name if obj.shift_template else None

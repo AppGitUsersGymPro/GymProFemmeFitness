@@ -5,10 +5,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Sum, Q, Prefetch, Count
+from django.core.exceptions import ValidationError as DjangoValidationError
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import timedelta
+
+from apps.devices.services import allocate_lowest_free_slot, free_slot
 
 logger = logging.getLogger(__name__)
 from .models import Diet, DietPlan, Member, MembershipPlan, MemberPayment, MemberAttendance, InstallmentPayment, TrainerAssignment, PTRenewal
@@ -211,7 +214,7 @@ class MembershipPlanViewSet(viewsets.ModelViewSet):
 
 
 class MemberViewSet(viewsets.ModelViewSet):
-    queryset         = Member.objects.select_related("plan", "diet").all()
+    queryset         = Member.objects.select_related("plan", "diet", "fingerprint_slot").all()
     serializer_class = MemberSerializer
     search_fields    = ["name","phone","email"]
     ordering_fields  = ["name","join_date","renewal_date","status","personal_trainer"]
@@ -222,7 +225,7 @@ class MemberViewSet(viewsets.ModelViewSet):
 
         qs     = (
             Member.objects
-            .select_related("plan", "diet")
+            .select_related("plan", "diet", "fingerprint_slot")
             .prefetch_related(
                 Prefetch(
                     "payments",
@@ -616,6 +619,31 @@ class MemberViewSet(viewsets.ModelViewSet):
         member.save()
         logger.info(f"MemberViewSet.cancel: member_id={member.id} name={member.name} cancelled, reason={reason!r}")
         return Response({"detail": "Member cancelled"})
+
+    @action(detail=True, methods=["post"], url_path="enroll-fingerprint")
+    def enroll_fingerprint(self, request, pk=None):
+        member = self.get_object()
+        if hasattr(member, "fingerprint_slot"):
+            return Response({
+                "detail": "Member already has a fingerprint slot.",
+                "slot_id": member.fingerprint_slot.slot_id,
+            }, status=400)
+        try:
+            slot = allocate_lowest_free_slot(member=member)
+        except (DjangoValidationError, IntegrityError) as e:
+            logger.warning(f"MemberViewSet.enroll_fingerprint: member_id={member.id} failed: {e}")
+            return Response({"detail": "Could not allocate a fingerprint slot. Please retry."}, status=409)
+        logger.info(f"MemberViewSet.enroll_fingerprint: member_id={member.id} -> slot_id={slot.slot_id}")
+        return Response({"slot_id": slot.slot_id})
+
+    @action(detail=True, methods=["post"], url_path="unenroll-fingerprint")
+    def unenroll_fingerprint(self, request, pk=None):
+        member = self.get_object()
+        freed = free_slot(member=member)
+        if not freed:
+            return Response({"detail": "Member has no fingerprint slot."}, status=400)
+        logger.info(f"MemberViewSet.unenroll_fingerprint: member_id={member.id} slot freed")
+        return Response({"detail": "Fingerprint slot unenrolled."}, status=204)
 
     @action(detail=False, methods=["get"])
     def expiring_soon(self, request):
