@@ -197,6 +197,45 @@ def _build_bill(member, payment, gym):
         "gym_email":         gym["email"],
         "gym_gstin":         gym["gstin"],
         "cycle_installments": installment_data,
+        "invoice_key":       str(member.invoice_key),
+    }
+
+
+def _build_pt_bill(renewal, gym):
+    member  = renewal.member
+    trainer = renewal.trainer
+    balance = max(renewal.total_amount - renewal.amount_paid, Decimal("0"))
+    return {
+        "invoice_number":  renewal.invoice_number,
+        "bill_type":       "PT Renewal",
+        "member_id":       member.display_id(),
+        "member_name":     member.name,
+        "phone":           member.phone,
+        "email":           member.email,
+        "trainer_name":    trainer.name,
+        "trainer_id":      trainer.display_id(),
+        "plan_name":       member.plan.name if member.plan else "",
+        "plan_valid_to":   str(member.renewal_date),
+        "pt_start_date":   str(renewal.pt_start_date),
+        "pt_end_date":     str(renewal.pt_end_date),
+        "pt_days":         renewal.pt_days,
+        "full_pt_days":    30,
+        "base_amount":     float(renewal.base_amount),
+        "gst_rate":        float(renewal.gst_rate),
+        "gst_amount":      float(renewal.gst_amount),
+        "total_amount":    float(renewal.total_amount),
+        "amount_paid":     float(renewal.amount_paid),
+        "balance":         float(balance),
+        "status":          renewal.status,
+        "mode_of_payment": renewal.mode_of_payment,
+        "date":            str(renewal.paid_date),
+        "gym_name":        gym["name"],
+        "gym_address":     gym["address"],
+        "gym_phone":       gym["phone"],
+        "gym_email":       gym["email"],
+        "gym_gstin":       gym["gstin"],
+        "notes":           renewal.notes,
+        "invoice_key":     str(member.invoice_key),
     }
 
 
@@ -713,6 +752,58 @@ class MemberAttendanceViewSet(viewsets.ModelViewSet):
         qs = MemberAttendance.objects.filter(
             date=timezone.localdate()).select_related("member")
         return Response(MemberAttendanceSerializer(qs, many=True).data)
+
+
+# ─── Public invoice endpoint (no auth) ───────────────
+
+class PublicInvoiceView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, key):
+        try:
+            member = Member.objects.select_related("plan").get(invoice_key=key)
+        except (ValueError, Member.DoesNotExist):
+            return Response({"detail": "Invoice link not found."}, status=404)
+
+        invoice_number = request.query_params.get("invoice", "").strip()
+        gym = _gym_info()
+
+        if invoice_number:
+            payment = member.payments.filter(invoice_number=invoice_number).first()
+            if payment:
+                bill = _build_bill(member, payment, gym)
+                for inst in bill["cycle_installments"]:
+                    inst.pop("notes", None)
+                return Response(bill)
+
+            renewal = member.pt_renewals.filter(invoice_number=invoice_number).first()
+            if renewal:
+                return Response(_build_pt_bill(renewal, gym))
+
+            return Response({"detail": "Invoice not found."}, status=404)
+
+        # No invoice specified — statement mode: return raw payment history
+        # for the frontend to aggregate the same way PaymentHistoryModal does.
+        payments = member.payments.order_by("paid_date", "created_at")
+        payment_data = MemberPaymentSerializer(payments, many=True).data
+        for p in payment_data:
+            p.pop("notes", None)
+            for inst in p.get("installment_payments", []):
+                inst.pop("notes", None)
+
+        return Response({
+            "member_id":     member.display_id(),
+            "member_name":   member.name,
+            "phone":         member.phone,
+            "email":         member.email,
+            "invoice_key":   str(member.invoice_key),
+            "gym_name":      gym["name"],
+            "gym_address":   gym["address"],
+            "gym_phone":     gym["phone"],
+            "gym_email":     gym["email"],
+            "gym_gstin":     gym["gstin"],
+            "payments":      payment_data,
+        })
 
 
 # ─── Public kiosk endpoints (no auth) ────────────────
@@ -1513,39 +1604,8 @@ class MemberTrainerAssignmentViewSet(viewsets.ModelViewSet):
             )
 
         # ── Build bill data ───────────────────────────────────────────────────
-        gym      = _gym_info()
-        bill_data = {
-            "invoice_number":  inv_no,
-            "bill_type":       "PT Renewal",
-            "member_id":       member.display_id(),
-            "member_name":     member.name,
-            "phone":           member.phone,
-            "email":           member.email,
-            "trainer_name":    trainer.name,
-            "trainer_id":      f"S{trainer.id:04d}",
-            "plan_name":       member.plan.name if member.plan else "",
-            "plan_valid_to":   str(member.renewal_date),
-            "pt_start_date":   str(pt_start),
-            "pt_end_date":     str(pt_end),
-            "pt_days":         pt_days,
-            "bonus_days":      current_pt_remaining,
-            "full_pt_days":    30,
-            "base_amount":     float(base),
-            "gst_rate":        float(rate),
-            "gst_amount":      float(gst_amt),
-            "total_amount":    float(total),
-            "amount_paid":     float(amount_paid),
-            "balance":         float(max(total - amount_paid, Decimal("0"))),
-            "status":          renewal_status,
-            "mode_of_payment": mode_of_payment,
-            "date":            str(today),
-            "gym_name":        gym["name"],
-            "gym_address":     gym["address"],
-            "gym_phone":       gym["phone"],
-            "gym_email":       gym["email"],
-            "gym_gstin":       gym["gstin"],
-            "notes":           notes,
-        }
+        gym       = _gym_info()
+        bill_data = _build_pt_bill(renewal, gym)
 
         # ── Send PT bill on WhatsApp ──────────────────────────────────────────
         from apps.notifications.whatsapp import send_bill_on_whatsapp

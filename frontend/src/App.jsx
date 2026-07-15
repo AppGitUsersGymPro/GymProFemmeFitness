@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import Layout from "./components/Layout";
 import Kiosk from "./pages/Kiosk/Kiosk";
+import PublicInvoice from "./pages/PublicInvoice/PublicInvoice";
 import Login from "./pages/Login/Login";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Members from "./pages/Members/Members";
@@ -28,6 +29,7 @@ export default function App() {
           {/* Public — no login needed */}
           <Route path="/login" element={<Login />} />
           <Route path="/kiosk" element={<Kiosk />} />
+          <Route path="/invoice/:key" element={<PublicInvoice />} />
 
           {/* Protected dashboard */}
           <Route path="/" element={<Protected><Layout /></Protected>}>

@@ -1,4 +1,5 @@
 import "./MemberBill.css";
+import WhatsAppButton from "./WhatsAppButton";
 
 /* ── tiny helpers ─────────────────────────────────────── */
 const fmt = (n) => Number(n || 0).toLocaleString("en-IN");
@@ -219,13 +220,14 @@ function hGrandSummary(grandBilled, grandPaid, outstanding) {
 /* ═══════════════════════════════════════════════════════
    Component
 ═══════════════════════════════════════════════════════ */
-export default function MemberBill({ bill, onClose }) {
+export default function MemberBill({ bill, onClose, standalone = false }) {
   if (!bill) return null;
 
   const isPaid = fmtF(bill.balance) <= 0;
   const hasGST = fmtF(bill.gst_rate) > 0;
   const isPartial = !isPaid && fmtF(bill.amount_paid) > 0;
   const isStatement = !!bill.isStatement;
+  const isPT = bill.bill_type === "PT Renewal";
   // For upgrade bills (standard→premium diet, or basic→premium assign),
   // only show the additional fees — not the plan fee that was already paid.
   const hideplanFee = !!bill.is_diet_upgrade || !!bill.is_pt_upgrade;
@@ -286,6 +288,56 @@ export default function MemberBill({ bill, onClose }) {
     <div class="section-label" style="margin-bottom:12px">Payment History — All Cycles</div>
     ${cyclesBlock}
     ${grandBlock}
+  </div>
+  ${footer}
+</div></body></html>`;
+    }
+
+    if (isPT) {
+      const isPaidPT = fmtF(bill.balance) <= 0;
+      const isPartialPT = !isPaidPT && fmtF(bill.amount_paid) > 0;
+      const badgePT = isPaidPT
+        ? `<span class="status-badge s-paid">✓ FULLY PAID</span>`
+        : isPartialPT
+          ? `<span class="status-badge s-partial">⚠ PARTIAL PAYMENT</span>`
+          : `<span class="status-badge s-pending">⏳ PENDING</span>`;
+      const isProrated = bill.pt_days < bill.full_pt_days;
+      return `<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"/><title>PT Renewal — ${bill.invoice_number}</title>
+<style>${HTML_CSS}</style></head><body><div class="page">
+  ${hGymHeader(bill)}
+  <div class="doc-title">Personal Training Renewal Receipt</div>
+  <div class="body">
+    <div class="meta">
+      <div>
+        <div class="inv-no">Invoice: ${bill.invoice_number || "—"}</div>
+        <div class="inv-date">Date: ${bill.date}</div>
+      </div>
+      <div>${badgePT}</div>
+    </div>
+    ${hMemberCard(bill)}
+    <div class="plan-box">
+      <div class="section-label">Personal Training Period</div>
+      <div class="plan-name">Trainer: ${bill.trainer_name} (${bill.trainer_id})</div>
+      <div class="plan-dates">
+        Start: ${bill.pt_start_date} &nbsp;→&nbsp; End: ${bill.pt_end_date} &nbsp;(${bill.pt_days} days)<br/>
+        Plan: ${bill.plan_name || "—"} &nbsp;·&nbsp; Valid till: ${bill.plan_valid_to}
+      </div>
+    </div>
+    ${isProrated ? `<div class="partial-note">
+      <strong>Prorated PT Fee:</strong> Only ${bill.pt_days} days remain in the membership plan.
+      Fee calculated as ${bill.pt_days}/${bill.full_pt_days} of the full monthly PT fee.
+    </div>` : ""}
+    <div class="billing">
+      <div class="section-label">Invoice Breakdown</div>
+      <div class="b-row"><span class="lbl">PT Base Fee (${bill.pt_days} days)</span><span class="val">₹${fmt(bill.base_amount)}</span></div>
+      ${hasGST ? `<div class="b-row gst"><span class="lbl">GST @ ${bill.gst_rate}%</span><span class="val">₹${fmt(bill.gst_amount)}</span></div>` : ""}
+      <div class="b-row total"><span class="lbl">Total Amount</span><span class="val">₹${fmt(bill.total_amount)}</span></div>
+      <div class="b-row paid"><span class="lbl">Amount Paid</span><span class="val">₹${fmt(bill.amount_paid)}</span></div>
+      ${fmtF(bill.balance) > 0 ? `<div class="b-row bal"><span class="lbl">Balance Due</span><span class="val">₹${fmt(bill.balance)}</span></div>` : ""}
+    </div>
+    ${bill.mode_of_payment ? `<div style="font-size:11px;color:#888;margin-bottom:12px;">Mode of Payment: <strong style="color:#555">${bill.mode_of_payment.toUpperCase()}</strong></div>` : ""}
+    ${bill.notes ? `<div style="font-size:11px;color:#888;margin-bottom:12px;background:#f5f5f5;border-radius:6px;padding:8px 12px;">Note: ${bill.notes}</div>` : ""}
   </div>
   ${footer}
 </div></body></html>`;
@@ -534,7 +586,7 @@ export default function MemberBill({ bill, onClose }) {
 
   /* ── render ─────────────────────────────────────── */
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className={standalone ? "bill-page" : "modal-overlay"} onClick={standalone ? undefined : onClose}>
       <div
         className="modal bill-modal"
         style={{ maxWidth: isStatement ? 820 : 680 }}
@@ -543,12 +595,13 @@ export default function MemberBill({ bill, onClose }) {
         {/* action bar */}
         <div className="bill-actions">
           <div style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700 }}>
-            {isStatement ? `📋 Statement — ${bill.member_name}` : `🧾 Invoice — ${bill.invoice_number}`}
+            {isStatement ? `📋 Statement — ${bill.member_name}` : isPT ? `💪 PT Renewal — ${bill.invoice_number}` : `🧾 Invoice — ${bill.invoice_number}`}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <WhatsAppButton bill={bill} />
             <button className="btn btn-sm btn-secondary" onClick={handlePrint}>🖨 Print</button>
             <button className="btn btn-sm btn-primary" onClick={handleDownload}>⬇ Download</button>
-            <button className="btn btn-sm btn-secondary" onClick={onClose}>✕ Close</button>
+            {!standalone && <button className="btn btn-sm btn-secondary" onClick={onClose}>✕ Close</button>}
           </div>
         </div>
 
@@ -561,7 +614,7 @@ export default function MemberBill({ bill, onClose }) {
             <div className="bill-gym-sub">{bill.gym_address}</div>
             {bill.gym_phone && <div className="bill-gym-sub">📞 {bill.gym_phone}</div>}
             {bill.gym_gstin && <div className="bill-gstin-pill">GSTIN: {bill.gym_gstin}</div>}
-            <div className="bill-title-tag">{isStatement ? "MEMBER STATEMENT" : "TAX INVOICE"}</div>
+            <div className="bill-title-tag">{isStatement ? "MEMBER STATEMENT" : isPT ? "PT RENEWAL RECEIPT" : "TAX INVOICE"}</div>
           </div>
 
           {/* meta row */}
@@ -592,8 +645,8 @@ export default function MemberBill({ bill, onClose }) {
             </div>
           </div>
 
-          {/* ── INVOICE-only ── */}
-          {!isStatement && (
+          {/* ── INVOICE-only (membership) ── */}
+          {!isStatement && !isPT && (
             <>
               {bill.plan_name && (
                 <div className="bill-plan-box">
@@ -715,6 +768,66 @@ export default function MemberBill({ bill, onClose }) {
                 <div className="bill-note">
                   ⚠ Partial payment recorded. Remaining ₹{fmt(bill.balance)} to be paid in installments.
                   GST fully accounted above — no additional GST on balance payments.
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── INVOICE-only (PT renewal) ── */}
+          {isPT && (
+            <>
+              <div className="bill-plan-box">
+                <div className="bill-section-label">Personal Training Period</div>
+                <div className="bill-plan-name">Trainer: {bill.trainer_name} ({bill.trainer_id})</div>
+                <div className="bill-plan-validity">
+                  {bill.pt_start_date} → {bill.pt_end_date} &nbsp;({bill.pt_days} days)<br />
+                  Plan: {bill.plan_name || "—"} &nbsp;·&nbsp; Valid till: {bill.plan_valid_to}
+                </div>
+              </div>
+
+              {bill.pt_days < bill.full_pt_days && (
+                <div className="bill-note">
+                  ⚠ <strong>Prorated PT Fee.</strong> Only {bill.pt_days} days remain in the membership plan.
+                  Fee calculated as {bill.pt_days}/{bill.full_pt_days} of the full monthly PT fee.
+                </div>
+              )}
+
+              <div className="bill-breakdown">
+                <div className="bill-section-label">Invoice Breakdown</div>
+                <div className="bill-line">
+                  <span>PT Base Fee ({bill.pt_days} days)</span>
+                  <span>₹{fmt(bill.base_amount)}</span>
+                </div>
+                {hasGST && (
+                  <div className="bill-line bill-line--gst">
+                    <span>GST @ {bill.gst_rate}%</span>
+                    <span>₹{fmt(bill.gst_amount)}</span>
+                  </div>
+                )}
+                <div className="bill-line bill-line--total">
+                  <span>Total Amount</span>
+                  <span>₹{fmt(bill.total_amount)}</span>
+                </div>
+                <div className="bill-line bill-line--paid">
+                  <span>Amount Paid</span>
+                  <span>₹{fmt(bill.amount_paid)}</span>
+                </div>
+                {fmtF(bill.balance) > 0 && (
+                  <div className="bill-line bill-line--balance">
+                    <span>Balance Due</span>
+                    <span>₹{fmt(bill.balance)}</span>
+                  </div>
+                )}
+              </div>
+
+              {bill.mode_of_payment && (
+                <div style={{ padding: "0 24px 12px", fontSize: 12, color: "var(--text3)" }}>
+                  Mode of Payment: <strong style={{ color: "var(--text2)" }}>{bill.mode_of_payment.toUpperCase()}</strong>
+                </div>
+              )}
+              {bill.notes && (
+                <div style={{ padding: "0 24px 12px", fontSize: 12, color: "var(--text3)" }}>
+                  Note: {bill.notes}
                 </div>
               )}
             </>

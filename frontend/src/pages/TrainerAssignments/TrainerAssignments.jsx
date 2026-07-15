@@ -17,135 +17,6 @@ function daysToStr(arr) {
 const fmt = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtD = n => Number(n || 0).toLocaleString("en-IN");
 
-/* ─── PT Bill HTML builder ─────────────────────────────────────────────────── */
-const PT_BILL_CSS = `
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f4f4;padding:32px 16px;color:#111}
-  .page{max-width:660px;margin:0 auto;background:#fff;border-radius:12px;
-        box-shadow:0 4px 24px rgba(0,0,0,.12);overflow:hidden}
-  .header{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:24px 32px;text-align:center}
-  .gym-name{font-size:20px;font-weight:800;letter-spacing:1px;margin-bottom:4px}
-  .gym-sub{font-size:11px;color:rgba(255,255,255,.65);line-height:1.7}
-  .gym-gstin{display:inline-block;margin-top:6px;background:rgba(168,255,87,.15);
-    color:#a8ff57;border:1px solid rgba(168,255,87,.3);border-radius:100px;
-    padding:2px 12px;font-size:11px;font-weight:700;letter-spacing:1px}
-  .doc-title{background:#a8ff57;color:#08080a;text-align:center;padding:9px;
-    font-size:12px;font-weight:800;letter-spacing:3px;text-transform:uppercase}
-  .body{padding:22px 32px}
-  .meta{display:flex;justify-content:space-between;margin-bottom:14px;
-    padding-bottom:12px;border-bottom:1px solid #eee;flex-wrap:wrap;gap:8px}
-  .inv-no{font-size:12px;font-weight:700;color:#444;margin-bottom:2px}
-  .inv-date{font-size:11px;color:#888}
-  .status-badge{display:inline-block;padding:3px 12px;border-radius:100px;font-size:10px;font-weight:800;letter-spacing:1px}
-  .s-paid   {background:#e8fff0;color:#1a7a00;border:1px solid #b0e0c0}
-  .s-partial{background:#fff8e0;color:#a06000;border:1px solid #e0c070}
-  .s-pending{background:#fff0f0;color:#cc0000;border:1px solid #f0c0c0}
-  .member-card{background:#f9f9f9;border-radius:8px;padding:12px 14px;margin-bottom:14px}
-  .member-name{font-size:16px;font-weight:800;color:#111;margin-bottom:3px}
-  .member-meta{font-size:11px;color:#666;line-height:1.7}
-  .member-id{display:inline-block;background:#e8f0ff;color:#1a3a9a;border-radius:4px;
-    padding:2px 7px;font-family:monospace;font-size:11px;font-weight:700}
-  .pt-box{background:#f0f8ff;border:1px solid #b0d8f0;border-radius:8px;
-    padding:12px 14px;margin-bottom:14px}
-  .pt-title{font-size:13px;font-weight:800;color:#0a4a7a;margin-bottom:6px}
-  .pt-dates{font-size:12px;color:#1a5a8a;line-height:1.8}
-  .pt-days-badge{display:inline-block;background:#1a5a8a;color:#fff;border-radius:4px;
-    padding:2px 10px;font-size:12px;font-weight:700;margin-left:6px}
-  .billing{margin-bottom:14px}
-  .b-row{display:flex;justify-content:space-between;align-items:center;
-    padding:7px 0;border-bottom:1px solid #f0f0f0;font-size:12px;color:#555}
-  .b-row:last-child{border-bottom:none}
-  .b-row.gst .val{color:#e05000}
-  .b-row.total{background:#f8f8f8;margin:4px -4px 0;padding:8px 4px;
-    border-radius:6px;border-bottom:none}
-  .b-row.total .lbl{font-size:13px;font-weight:800;color:#111}
-  .b-row.total .val{font-size:16px;font-weight:800;color:#111}
-  .b-row.paid  .val{color:#1a7a00;font-weight:800}
-  .b-row.bal   .val{color:#cc0000;font-weight:800}
-  .prorated-note{background:#fff8e8;border:1px solid #f0d090;border-radius:6px;
-    padding:8px 12px;margin-bottom:12px;font-size:11px;color:#8a5000;line-height:1.6}
-  .footer{text-align:center;padding:16px 32px;border-top:1px solid #eee;
-    font-size:10px;color:#999;line-height:1.8;background:#fafafa}
-  @media print{body{background:#fff;padding:0}.page{box-shadow:none;border-radius:0}}
-`;
-
-function buildPtBillHtml(b) {
-  const statusCls = b.status === "paid" ? "s-paid" : b.status === "partial" ? "s-partial" : "s-pending";
-  const isProrated = b.pt_days < b.full_pt_days;
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-    <title>PT Renewal Bill — ${b.member_name}</title>
-    <style>${PT_BILL_CSS}</style></head><body>
-    <div class="page">
-      <div class="header">
-        <div class="gym-name">${b.gym_name || "Gym"}</div>
-        <div class="gym-sub">${b.gym_address || ""}${b.gym_phone ? " · " + b.gym_phone : ""}${b.gym_email ? " · " + b.gym_email : ""}</div>
-        ${b.gym_gstin ? `<div class="gym-gstin">GSTIN: ${b.gym_gstin}</div>` : ""}
-      </div>
-      <div class="doc-title">Personal Training Renewal Receipt</div>
-      <div class="body">
-        <div class="meta">
-          <div>
-            <div class="inv-no">${b.invoice_number}</div>
-            <div class="inv-date">Date: ${b.date}</div>
-          </div>
-          <div>
-            <span class="status-badge ${statusCls}">${b.status.toUpperCase()}</span>
-          </div>
-        </div>
-
-        <div class="member-card">
-          <div class="member-name">${b.member_name}</div>
-          <div class="member-meta">
-            <span class="member-id">${b.member_id}</span>
-            ${b.phone ? ` &nbsp;·&nbsp; ${b.phone}` : ""}
-            ${b.email ? ` &nbsp;·&nbsp; ${b.email}` : ""}<br>
-            Plan: <strong>${b.plan_name || "—"}</strong> &nbsp;·&nbsp; Plan valid till: <strong>${b.plan_valid_to}</strong><br>
-            Trainer: <strong>${b.trainer_name}</strong> (${b.trainer_id})
-          </div>
-        </div>
-
-        <div class="pt-box">
-          <div class="pt-title">Personal Training Period</div>
-          <div class="pt-dates">
-            Start: <strong>${b.pt_start_date}</strong> &nbsp;&rarr;&nbsp; End: <strong>${b.pt_end_date}</strong>
-            <span class="pt-days-badge">${b.pt_days} days</span>
-          </div>
-        </div>
-
-        ${isProrated ? `<div class="prorated-note">
-          <strong>Prorated PT Fee:</strong> Only ${b.pt_days} days remain in the membership plan.
-          Fee calculated as ${b.pt_days}/${b.full_pt_days} of the full monthly PT fee.
-        </div>` : ""}
-
-        <div class="billing">
-          <div class="b-row"><span class="lbl">PT Base Fee (${b.pt_days} days)</span><span class="val">&#8377;${fmt(b.base_amount)}</span></div>
-          <div class="b-row gst"><span class="lbl">GST (${b.gst_rate}%)</span><span class="val">&#8377;${fmt(b.gst_amount)}</span></div>
-          <div class="b-row total"><span class="lbl">Total Amount</span><span class="val">&#8377;${fmt(b.total_amount)}</span></div>
-          <div class="b-row paid"><span class="lbl">Amount Paid</span><span class="val">&#8377;${fmt(b.amount_paid)}</span></div>
-          ${parseFloat(b.balance) > 0 ? `<div class="b-row bal"><span class="lbl">Balance Due</span><span class="val">&#8377;${fmt(b.balance)}</span></div>` : ""}
-        </div>
-        ${b.mode_of_payment ? `<div style="font-size:11px;color:#888;margin-bottom:12px;">Mode of Payment: <strong style="color:#555">${b.mode_of_payment.toUpperCase()}</strong></div>` : ""}
-        ${b.notes ? `<div style="font-size:11px;color:#888;margin-bottom:12px;background:#f5f5f5;border-radius:6px;padding:8px 12px;">Note: ${b.notes}</div>` : ""}
-      </div>
-      <div class="footer">
-        Thank you for your continued commitment to your fitness journey!<br>
-        <strong>${b.gym_name || "Gym"}</strong> — This is a computer-generated receipt.
-      </div>
-    </div>
-  </body></html>`;
-}
-
-function downloadPtBill(bill) {
-  const html  = buildPtBillHtml(bill);
-  const blob  = new Blob([html], { type: "text/html" });
-  const url   = URL.createObjectURL(blob);
-  const a     = document.createElement("a");
-  a.href      = url;
-  a.download  = `PT-Renewal-${bill.member_name.replace(/\s+/g, "-")}-${bill.pt_start_date}.html`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 /* ─── PT Renewal Modal ─────────────────────────────────────────────────────── */
 function PTRenewalModal({ assignment, onClose, onSave }) {
   const [preview, setPreview]         = useState(null);
@@ -189,8 +60,10 @@ function PTRenewalModal({ assignment, onClose, onSave }) {
     }
   };
 
+  if (bill) return <MemberBill bill={bill} onClose={onSave} />;
+
   return (
-    <div className="modal-overlay" onClick={bill ? undefined : onClose}>
+    <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
         <div className="modal-title">Renew Personal Training</div>
 
@@ -206,41 +79,6 @@ function PTRenewalModal({ assignment, onClose, onSave }) {
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button className="btn btn-ghost" onClick={onClose}>Close</button>
-            </div>
-          </>
-        ) : bill ? (
-          /* ── Success state: show bill download ── */
-          <>
-            <div style={{
-              background: "rgba(168,255,87,.08)", border: "1px solid rgba(168,255,87,.3)",
-              borderRadius: 8, padding: "12px 14px", color: "var(--accent)", fontSize: 13, marginBottom: 16,
-            }}>
-              PT renewed successfully for <strong>{bill.pt_days} days</strong> ({bill.pt_start_date} → {bill.pt_end_date}).
-            </div>
-
-            {/* Summary */}
-            <div style={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 16, fontSize: 13 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: "var(--text2)" }}>Total Amount</span>
-                <span style={{ fontWeight: 700 }}>₹{fmt(bill.total_amount)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: "var(--text2)" }}>Amount Paid</span>
-                <span style={{ fontWeight: 700, color: "var(--accent)" }}>₹{fmt(bill.amount_paid)}</span>
-              </div>
-              {parseFloat(bill.balance) > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--text2)" }}>Balance Due</span>
-                  <span style={{ fontWeight: 700, color: "#e05555" }}>₹{fmt(bill.balance)}</span>
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button className="btn btn-ghost" onClick={onSave}>Close</button>
-              <button className="btn btn-primary" onClick={() => downloadPtBill(bill)}>
-                Download PT Bill
-              </button>
             </div>
           </>
         ) : (

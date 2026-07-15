@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import "./Members.css";
 import MemberBill from "../../components/MemberBill";
 import ConfirmModal from "../../components/ConfirmModal";
+import { buildStatementBill } from "../../utils/billHelpers";
 
 
 function statusBadge(s) {
@@ -838,22 +839,13 @@ function PaymentHistoryModal({ member, onClose, onRefresh, onBill, gymInfo = {} 
           <div style={{ display: "flex", gap: 8 }}>
             {payments.length > 0 && (
               <button className="btn btn-sm btn-primary" onClick={() => {
-                const sortedAsc = [...payments]
-                  .sort((a, b) => new Date(a.paid_date) - new Date(b.paid_date))
-                  .map(p => ({ ...p, cycle_installments: p.installment_payments || [] }));
-                onBill({
-                  isStatement: true,
+                onBill(buildStatementBill({
                   member_name: member.name,
                   member_id: member.member_id_display || `M${String(member.id).padStart(4, "0")}`,
                   phone: member.phone || "",
                   email: member.email || "",
-                  date: new Date().toISOString().slice(0, 10),
-                  invoice_number: "",
-                  plan_price: 0, gst_rate: 0, gst_amount: 0,
-                  total_with_gst: 0, amount_paid: 0, balance: 0,
-                  ...gymInfo,
-                  installments: sortedAsc,
-                });
+                  invoice_key: member.invoice_key,
+                }, payments, gymInfo));
               }}>📋 Full Statement</button>
             )}
             <button className="btn btn-sm btn-secondary" onClick={onClose}>✕</button>

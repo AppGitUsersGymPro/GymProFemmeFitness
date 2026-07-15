@@ -1,4 +1,5 @@
 import logging
+import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -45,6 +46,7 @@ class Member(models.Model):
     personal_trainer       = models.BooleanField(default=False)
     joining_date           = models.DateField(default=timezone.localdate, null=True, blank=True)
     notifications_enabled  = models.BooleanField(default=True)
+    invoice_key            = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
 
     class Meta:
         ordering = ["-created_at"]
