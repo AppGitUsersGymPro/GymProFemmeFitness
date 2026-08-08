@@ -6,6 +6,7 @@ import "./Members.css";
 import MemberBill from "../../components/MemberBill";
 import ConfirmModal from "../../components/ConfirmModal";
 import { buildStatementBill } from "../../utils/billHelpers";
+import ChromeNotifyLinkModal from "../../components/ChromeNotifyLinkModal";
 
 
 function statusBadge(s) {
@@ -1038,7 +1039,7 @@ function PaymentHistoryModal({ member, onClose, onRefresh, onBill, gymInfo = {} 
 }
 
 /* ─── View Member Detail Modal (mobile) ───────────── */
-function ViewMemberModal({ member: m, onClose, onEdit, onRenew, onPayments, onCancel, onDelete, onEnrollFingerprint, onUnenrollFingerprint }) {
+function ViewMemberModal({ member: m, onClose, onEdit, onRenew, onPayments, onCancel, onDelete, onEnrollFingerprint, onUnenrollFingerprint, onChromeNotify }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
@@ -1098,6 +1099,9 @@ function ViewMemberModal({ member: m, onClose, onEdit, onRenew, onPayments, onCa
             disabled={m.days_until_expiry != null && m.days_until_expiry > 0} onClick={onRenew}>Renew</button>
           <button className="btn btn-sm" style={{ background: "rgba(77,166,255,.12)", color: "var(--info)" }} onClick={onPayments}>
             Payments{(m.balance_due || 0) > 0 ? " ⚠" : ""}
+          </button>
+          <button className="btn btn-sm" style={{ background: "var(--accent-dim)", color: "var(--accent)" }} onClick={onChromeNotify}>
+            🔔 Chrome Notifications
           </button>
           {m.status !== "cancelled" && (
             <button className="btn btn-sm btn-danger" onClick={onCancel}>Cancel</button>
@@ -1297,6 +1301,7 @@ export default function Members() {
   const [confirmState, setConfirmState] = useState(null);
   const [viewMember, setViewMember] = useState(null);
   const [dietUpgradeMemberId, setDietUpgradeMemberId] = useState(null);
+  const [chromeNotifyMember, setChromeNotifyMember] = useState(null);
 
 
   useEffect(() => {
@@ -1870,6 +1875,13 @@ export default function Members() {
           onDelete={() => { deleteMember(viewMember); setViewMember(null); }}
           onEnrollFingerprint={() => { enrollFingerprint(viewMember); setViewMember(null); }}
           onUnenrollFingerprint={() => { unenrollFingerprint(viewMember); setViewMember(null); }}
+          onChromeNotify={() => setChromeNotifyMember(viewMember)}
+        />
+      )}
+      {chromeNotifyMember && (
+        <ChromeNotifyLinkModal
+          member={chromeNotifyMember}
+          onClose={() => setChromeNotifyMember(null)}
         />
       )}
     </div>

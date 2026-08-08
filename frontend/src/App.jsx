@@ -16,6 +16,7 @@ import Settings from "./pages/Settings/Settings";
 import Diets from "./pages/Diet/DietPage";
 import TrainerAssignments from "./pages/TrainerAssignments/TrainerAssignments";
 import Enquiry from "./pages/Enquiry/Enquiry";
+import MemberNotifyOptIn from "./pages/MemberNotifyOptIn/MemberNotifyOptIn";
 function Protected({ children }) {
   const { user } = useAuth();
   return user ? children : <Navigate to="/login" replace />;
@@ -30,6 +31,8 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/kiosk" element={<Kiosk />} />
           <Route path="/invoice/:key" element={<PublicInvoice />} />
+          {/* Obscure, hard-to-guess path — reached only via the QR the admin shows */}
+          <Route path="/nx7qk2vwmz9pfhrb3jt/" element={<MemberNotifyOptIn />} />
 
           {/* Protected dashboard */}
           <Route path="/" element={<Protected><Layout /></Protected>}>
